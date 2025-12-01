@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Host Pro</title>
+    
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+    <style>
+        :root { --bg: #000000; --panel: #1a1a1a; --text: #ffffff; --accent: #2563eb; --danger: #ef4444; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Video Container */
+        #video-container { position: relative; flex-grow: 1; display: flex; justify-content: center; align-items: center; background: #000; overflow: hidden; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* Overlays */
+        .overlay { position: absolute; padding: 6px 12px; background: rgba(0,0,0,0.6); border-radius: 8px; font-size: 14px; font-weight: bold; pointer-events: none; z-index: 10; backdrop-filter: blur(4px); }
+        .top-left { top: 15px; left: 15px; }
+        .top-right { top: 15px; right: 15px; color: #4ade80; display: flex; align-items: center; gap: 8px; }
+        .blink { animation: blinker 1.5s linear infinite; width: 8px; height: 8px; background: #4ade80; border-radius: 50%; }
+        @keyframes blinker { 50% { opacity: 0; } }
+
+        /* Control Panel */
+        #controls { background: var(--panel); padding: 25px; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 15px; z-index: 20; border-radius: 20px 20px 0 0; box-shadow: 0 -5px 20px rgba(0,0,0,0.5); }
+        
+        h3 { margin: 0 0 10px 0; text-align: center; color: #aaa; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+
+        input, button { padding: 15px; border-radius: 12px; border: none; width: 100%; box-sizing: border-box; font-size: 18px; outline: none; transition: 0.2s; }
+        
+        input { background: #333; color: white; border: 2px solid #444; text-align: center; letter-spacing: 5px; font-family: monospace; }
+        input:focus { border-color: var(--accent); background: #222; }
+        
+        button { background: var(--accent); color: white; font-weight: bold; cursor: pointer; }
+        button:active { transform: scale(0.98); }
+        
+        .stop-btn { background: var(--danger); color: white; margin-top: 10px; }
+        .secondary-btn { background: #333; color: #ccc; }
+        
+        /* Big Code Display */
+        .code-display { font-size: 48px; font-weight: 900; color: #fbbf24; text-align: center; letter-spacing: 8px; margin: 10px 0; font-family: monospace; }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="video-container">
+        <video id="vid" autoplay playsinline></video>
+        <div class="overlay top-left" id="status">Ready</div>
+        
+        <div class="overlay top-right hidden" id="viewer-tag">
+            <div class="blink"></div> LIVE 
+            <span style="color:white; margin-left: 8px;">👤 <span id="count">0</span></span>
+        </div>
+    </div>
+
+    <div id="controls">
+        
+        <div id="menu">
+            <h3>Start Streaming</h3>
+            <button onclick="startHost()">🎥 Start Host (Back Cam)</button>
+            
+            <div style="text-align: center; margin: 15px 0; font-size: 12px; color: #666; position: relative;">
+                <span style="background: var(--panel); padding: 0 10px; position: relative; z-index: 1;">OR JOIN</span>
+                <div style="position: absolute; top: 50%; width: 100%; height: 1px; background: #333; left: 0; z-index: 0;"></div>
+            </div>
+
+            <input type="tel" id="remoteCode" placeholder="0000" maxlength="4">
+            <button class="secondary-btn" onclick="startViewer()">📺 Connect to Code</button>
+        </div>
+
+        <div id="host-ui" class="hidden">
+            <h3>Your Connection Code</h3>
+            <div id="my-code-display" class="code-display">...</div>
+            <p style="text-align: center; color: #888; font-size: 12px; margin: 0;">Enter this 4-digit code on the other device</p>
+            <button class="stop-btn" onclick="stopStream()">⏹ Stop Stream</button>
+        </div>
+
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const APP_PREFIX = "spck-cam-v1-"; 
+
+        // --- DOM ELEMENTS ---
+        const video = document.getElementById('vid');
+        const statusEl = document.getElementById('status');
+        const viewerTag = document.getElementById('viewer-tag');
+        const countSpan = document.getElementById('count');
+        const codeDisplay = document.getElementById('my-code-display');
+        
+        let peer;
+        let localStream;
+        let activeConnections = []; // Track who is watching
+
+        // --- 1. HOST LOGIC ---
+        function startHost() {
+            const shortCode = Math.floor(1000 + Math.random() * 9000); 
+            const fullPeerId = APP_PREFIX + shortCode;
+
+            document.getElementById('menu').classList.add('hidden');
+            document.getElementById('host-ui').classList.remove('hidden');
+            codeDisplay.innerText = shortCode;
+            
+            navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment" }, 
+                audio: true 
+            }).then(stream => {
+                localStream = stream;
+                video.srcObject = stream;
+                video.muted = true; 
+                statusEl.innerText = "Initializing...";
+
+                peer = new Peer(fullPeerId);
+                
+                peer.on('open', (id) => {
+                    statusEl.innerText = "Ready. Waiting for connection...";
+                });
+
+                peer.on('error', (err) => {
+                    if (err.type === 'unavailable-id') {
+                        startHost(); // Retry if code taken
+                    } else {
+                        alert("Error: " + err.type);
+                    }
+                });
+
+                // When a Viewer connects
+                peer.on('connection', (conn) => {
+                    // Add to list
+                    activeConnections.push(conn);
+                    updateViewerCount();
+                    
+                    // Call them back with video
+                    const call = peer.call(conn.peer, localStream);
+                    
+                    // Show "LIVE" tag
+                    viewerTag.classList.remove('hidden');
+
+                    // Remove when they leave
+                    conn.on('close', () => {
+                        removeConnection(conn.peer);
+                    });
+                    
+                    // Backup: PeerJS sometimes uses 'error' for disconnects
+                    conn.on('error', () => {
+                        removeConnection(conn.peer);
+                    });
+                });
+                
+            }).catch(e => {
+                alert("Camera Error: " + e);
+                location.reload();
+            });
+        }
+
+        function updateViewerCount() {
+            const count = activeConnections.length;
+            countSpan.innerText = count;
+            statusEl.innerText = count > 0 ? "Streaming to devices" : "Waiting for connection...";
+        }
+
+        function removeConnection(peerId) {
+            activeConnections = activeConnections.filter(c => c.peer !== peerId);
+            updateViewerCount();
+        }
+
+        // --- 2. STOP STREAM FUNCTION ---
+        function stopStream() {
+            if (confirm("Stop the stream and disconnect all viewers?")) {
+                // 1. Stop Camera Hardware
+                if(localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                }
+                
+                // 2. Close all connections
+                activeConnections.forEach(conn => conn.close());
+                
+                // 3. Destroy Peer
+                if(peer) peer.destroy();
+
+                // 4. Reload page to reset everything
+                window.location.reload();
+            }
+        }
+
+        // --- 3. VIEWER LOGIC ---
+        function startViewer() {
+            const codeInput = document.getElementById('remoteCode').value.trim();
+            if(codeInput.length !== 4) return alert("Please enter the 4-digit code");
+            const hostId = APP_PREFIX + codeInput;
+
+            document.getElementById('menu').classList.add('hidden');
+            statusEl.innerText = "Searching...";
+            
+            video.muted = false; 
+            video.controls = true;
+
+            peer = new Peer();
+
+            peer.on('open', () => {
+                const conn = peer.connect(hostId);
+
+                conn.on('open', () => {
+                    statusEl.innerText = "Connected! Waiting for Video...";
+                });
+                
+                // If Host closes stream
+                conn.on('close', () => {
+                    alert("Host ended the stream.");
+                    window.location.reload();
+                });
+
+                peer.on('call', (call) => {
+                    call.answer(null); 
+                    call.on('stream', (remoteStream) => {
+                        statusEl.innerText = "";
+                        video.srcObject = remoteStream;
+                        video.play();
+                        
+                        // Cinema Mode for Viewer
+                        document.getElementById('controls').style.display = 'none';
+                        viewerTag.classList.remove('hidden');
+                        // Viewer doesn't see count, only LIVE tag
+                        countSpan.parentElement.style.display = 'none'; 
+                    });
+                });
+
+                setTimeout(() => {
+                    if(statusEl.innerText.includes("Searching")) {
+                        statusEl.innerText = "Host not found (Check Code)";
+                    }
+                }, 5000);
+            });
+        }
+    </script>
+</body>
+</html>
