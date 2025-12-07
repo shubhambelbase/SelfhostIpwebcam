@@ -35,6 +35,9 @@ body {
 #video-container { position: relative; flex-grow: 1; background:#000; overflow:hidden; }
 video { width:100%; height:100%; object-fit:cover; filter:brightness(1.05) contrast(1.1); transform: scale(1); transform-origin: center; transition: transform 0.1s; position:relative; z-index: 1; }
 
+/* Hidden audio element for Talk-Back */
+#remote-audio { display: none; }
+
 #motion-alert {
   position: absolute; inset:0; pointer-events:none; z-index:20; opacity:0;
   box-shadow: inset 0 0 100px var(--danger);
@@ -193,9 +196,9 @@ button:active { transform:scale(.98); }
 
 .hidden { display:none !important; }
 
-/* Modified grid for 3 tools */
-.host-tools { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 5px; }
-.tool-btn { font-size: 11px; padding: 14px 5px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #aaa; transition: 0.2s; white-space: nowrap; }
+/* Grid for 4 tools (Flash, Mic, Rec, Speaker) */
+.host-tools { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-top: 5px; }
+.tool-btn { font-size: 10px; padding: 14px 2px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #aaa; transition: 0.2s; white-space: nowrap; text-align: center;}
 .tool-btn.active { background: rgba(59, 130, 246, 0.2); border-color: var(--accent); color: var(--accent); }
 .tool-btn.recording { background: rgba(239, 68, 68, 0.2); border-color: var(--danger); color: var(--danger); animation: pulse 1s infinite; }
 
@@ -221,6 +224,7 @@ input:checked + .slider:before { transform: translateX(22px); }
 }
 .remote-btn:active { transform: scale(0.95); }
 .remote-btn.active { background: var(--accent); border-color: var(--accent-glow); box-shadow: 0 0 20px var(--accent); }
+.remote-btn.talking { background: var(--live); box-shadow: 0 0 25px var(--live); animation: pulse 1s infinite; }
 .remote-btn svg { width: 24px; height: 24px; fill: currentColor; }
 
 #viewer-back-btn {
@@ -265,7 +269,7 @@ input:checked + .slider:before { transform: translateX(22px); }
 
 <div id="video-container">
   <video id="vid" autoplay playsinline muted></video>
-  <canvas id="audio-visualizer"></canvas>
+  <audio id="remote-audio" autoplay></audio> <canvas id="audio-visualizer"></canvas>
   <div id="motion-alert"></div>
 
   <div id="preview-overlay">
@@ -339,6 +343,7 @@ input:checked + .slider:before { transform: translateX(22px); }
         <button id="btn-torch" class="tool-btn" onclick="toggleTorch()">⚡ Flash</button>
         <button id="btn-mic" class="tool-btn" onclick="toggleMic()">🎤 Mute</button>
         <button id="btn-record" class="tool-btn" onclick="toggleRecording()">REC ●</button>
+        <button id="btn-speaker" class="tool-btn active" onclick="toggleSpeaker()">🔊 Sound</button>
     </div>
 
     <div class="divider" style="margin: 10px 0 5px 0;"><span>DIGITAL ZOOM</span></div>
@@ -352,7 +357,7 @@ input:checked + .slider:before { transform: translateX(22px); }
     <button id="rem-torch" class="remote-btn" onclick="remoteToggleTorch()">
         <svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
     </button>
-    <button id="rem-mic" class="remote-btn" onclick="remoteToggleMic()">
+    <button id="rem-talk" class="remote-btn" onmousedown="startTalking()" onmouseup="stopTalking()" ontouchstart="startTalking()" ontouchend="stopTalking()">
         <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
     </button>
 </div>
@@ -390,14 +395,17 @@ const motionAlert = document.getElementById('motion-alert');
 const galleryGrid = document.getElementById('gallery-grid');
 const fabGallery = document.getElementById('fab-gallery');
 const viewerControls = document.getElementById('viewer-controls');
+const remoteAudio = document.getElementById('remote-audio');
 
 let peer, localStream, activeConnections = [];
+let viewerStream; // Stream for talkback
 let wakeLock = null;
 let isHost = false;
 let db = null;
 let heartbeatInterval = null;
 let isTorchOn = false;
 let isMicOn = true;
+let isSpeakerOn = true; // Host speaker status
 
 // New Global Vars
 let mediaRecorder;
@@ -508,8 +516,6 @@ function triggerMotionAlert() {
   savePhoto(c.toDataURL('image/jpeg', 0.5));
 }
 
-// --- NEW FEATURES: ZOOM, RECORD, VISUALIZER ---
-
 function setZoom(val) {
   video.style.transform = `scale(${val})`;
 }
@@ -566,7 +572,6 @@ function initAudioVisualizer(stream) {
   visualizerCanvas = document.getElementById('audio-visualizer');
   canvasCtx = visualizerCanvas.getContext('2d');
   
-  // Set canvas resolution
   visualizerCanvas.width = visualizerCanvas.offsetWidth;
   visualizerCanvas.height = visualizerCanvas.offsetHeight;
 
@@ -630,6 +635,24 @@ function toggleMic() {
     broadcastState(); 
 }
 
+// Host speaker toggle
+function toggleSpeaker() {
+    isSpeakerOn = !isSpeakerOn;
+    remoteAudio.muted = !isSpeakerOn;
+    
+    // Maximize volume when enabled
+    if(isSpeakerOn) remoteAudio.volume = 1.0; 
+
+    const btn = document.getElementById('btn-speaker');
+    if(isSpeakerOn) {
+        btn.classList.add('active');
+        btn.innerHTML = "🔊 Sound";
+    } else {
+        btn.classList.remove('active');
+        btn.innerHTML = "🔇 Muted";
+    }
+}
+
 function updateHardwareUI() {
     document.getElementById('btn-torch').classList.toggle('active', isTorchOn);
     const micBtn = document.getElementById('btn-mic');
@@ -646,13 +669,24 @@ function remoteToggleTorch() {
     if(activeConnections[0]) activeConnections[0].send({type: 'REMOTE_TORCH'});
 }
 
-function remoteToggleMic() {
-    if(activeConnections[0]) activeConnections[0].send({type: 'REMOTE_MIC'});
+// Viewer Talk Back
+function startTalking() {
+    if(viewerStream) {
+        viewerStream.getAudioTracks()[0].enabled = true;
+        document.getElementById('rem-talk').classList.add('talking');
+    }
+}
+
+function stopTalking() {
+    if(viewerStream) {
+        viewerStream.getAudioTracks()[0].enabled = false;
+        document.getElementById('rem-talk').classList.remove('talking');
+    }
 }
 
 function updateViewerUI(state) {
     document.getElementById('rem-torch').classList.toggle('active', state.torch);
-    document.getElementById('rem-mic').classList.toggle('active', !state.mic);
+    // Don't update Mic button here as it's now Push-to-Talk for local user
 }
 
 // --- STATE SYNC ---
@@ -696,6 +730,10 @@ function goBackToMenu() {
       const track = localStream.getVideoTracks()[0];
       if(track) track.applyConstraints({ advanced: [{ torch: false }] }).catch(e=>{});
       localStream.getTracks().forEach(t => t.stop());
+  }
+  
+  if (viewerStream) {
+      viewerStream.getTracks().forEach(t => t.stop());
   }
   
   // Cleanup recording
@@ -789,7 +827,16 @@ function startHost() {
             activeConnections = activeConnections.filter(c => c !== conn); 
             updateViewerCount(); 
         });
-        peer.call(conn.peer, stream);
+        
+        // Host CALLS the viewer
+        const call = peer.call(conn.peer, stream);
+        
+        // Host LISTENS for viewer stream (Talk Back)
+        call.on('stream', remoteStream => {
+            remoteAudio.srcObject = remoteStream;
+            remoteAudio.play().catch(e => console.log("Audio play err", e));
+        });
+
         viewerTag.classList.remove('hidden');
       });
       startHeartbeat();
@@ -807,39 +854,52 @@ function updateViewerCount() {
 function startViewer() {
   const code = document.getElementById('remoteCode').value.trim();
   if (code.length !== 4) return alert("Enter 4-digit code");
-  isHost = false;
-  statusEl.innerText = "Connecting...";
   
-  peer = new Peer(null, PEER_CONFIG);
-  
-  peer.on('error', err => {
-      alert("Connection failed. Check code or internet.");
-      goBackToMenu();
-  });
+  // Get Viewer Microphone Access
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(vStream => {
+      viewerStream = vStream;
+      viewerStream.getAudioTracks()[0].enabled = false; // Mute initially (Push to Talk)
 
-  peer.on('open', () => {
-    const conn = peer.connect(APP_PREFIX + code);
-    handleData(conn);
-    conn.on('open', () => {
-      showUI('viewer');
-      statusEl.innerText = "Waiting for video...";
-      activeConnections = [conn]; 
-      startHeartbeat();
-    });
-    conn.on('close', () => { alert("Host Disconnected"); goBackToMenu(); });
-    
-    peer.on('call', call => {
-      call.answer();
-      call.on('stream', stream => {
-        video.srcObject = stream;
-        video.muted = false; 
-        video.volume = 1;
-        video.play().catch(e => console.log(e));
-        viewerTag.classList.remove('hidden');
-        countSpan.parentElement.style.display = 'none';
-        statusEl.innerText = "Connected";
+      isHost = false;
+      statusEl.innerText = "Connecting...";
+      
+      peer = new Peer(null, PEER_CONFIG);
+      
+      peer.on('error', err => {
+          alert("Connection failed. Check code or internet.");
+          goBackToMenu();
       });
-    });
+
+      peer.on('open', () => {
+        const conn = peer.connect(APP_PREFIX + code);
+        handleData(conn);
+        conn.on('open', () => {
+          showUI('viewer');
+          statusEl.innerText = "Waiting for video...";
+          activeConnections = [conn]; 
+          startHeartbeat();
+        });
+        conn.on('close', () => { alert("Host Disconnected"); goBackToMenu(); });
+        
+        peer.on('call', call => {
+          // Answer with Viewer Stream (Talk back)
+          call.answer(viewerStream);
+          
+          call.on('stream', stream => {
+            video.srcObject = stream;
+            video.muted = false; 
+            video.volume = 1;
+            video.play().catch(e => console.log(e));
+            viewerTag.classList.remove('hidden');
+            countSpan.parentElement.style.display = 'none';
+            statusEl.innerText = "Connected";
+          });
+        });
+      });
+
+  }).catch(e => {
+      alert("Microphone permission needed to talk back!");
+      goBackToMenu();
   });
 }
 
@@ -850,7 +910,7 @@ function handleData(conn) {
             getAllPhotos(photos => conn.send({ type: 'LOG_DATA', photos: photos ? photos.reverse() : [] }));
         }
         if (data.type === 'REMOTE_TORCH') toggleTorch(true);
-        if (data.type === 'REMOTE_MIC') toggleMic();
+        // REMOTE_MIC removed from here, viewer now controls their own mic
     }
     if (!isHost) {
         if (data.type === 'SYNC_STATUS') {
