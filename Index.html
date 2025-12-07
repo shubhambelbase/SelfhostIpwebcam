@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IP Camera Pro +</title>
+<title>IP Camera Pro</title>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
 <style>
@@ -11,7 +11,7 @@
 
 :root {
   --bg: #0d0d0d;
-  --panel: rgba(20,20,30,0.9);
+  --panel: rgba(20,20,30,0.95);
   --glass: rgba(30,30,50,0.4);
   --accent: #3b82f6;
   --accent-glow: #60a5fa;
@@ -32,7 +32,7 @@ body {
   overflow: hidden;
 }
 
-/* Video & Motion FX */
+/* Video Container */
 #video-container { position: relative; flex-grow: 1; background:#000; overflow:hidden; }
 video { width:100%; height:100%; object-fit:cover; filter:brightness(1.05) contrast(1.1); transform: scaleX(1); position:relative; z-index: 1; }
 
@@ -69,7 +69,6 @@ body.streaming #preview-overlay { opacity:0; pointer-events:none; transform:scal
 .top-right { top:20px; right:20px; color:var(--live); display:flex; align-items:center; gap:10px; font-weight:700; }
 .blink { width:12px; height:12px; background:var(--live); border-radius:50%; animation:blinker 1.4s infinite, pulse 2s infinite; box-shadow:0 0 20px var(--live); }
 
-/* Battery Icon */
 .bat-icon { width: 24px; height: 12px; border: 1px solid #fff; border-radius: 2px; position: relative; margin-left: 5px; }
 .bat-icon::after { content:''; position: absolute; right: -3px; top: 2px; height: 6px; width: 2px; background: #fff; }
 .bat-fill { height: 100%; background: var(--live); width: 100%; transition: width 0.5s; }
@@ -79,6 +78,7 @@ body.streaming #preview-overlay { opacity:0; pointer-events:none; transform:scal
 #controls {
   background:var(--panel); backdrop-filter:blur(20px); padding:28px; border-radius:28px 28px 0 0;
   box-shadow:0 -20px 40px rgba(0,0,0,.6); position:relative; z-index: 100;
+  padding-bottom: 40px; 
 }
 #controls::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--accent),transparent); opacity:.6; }
 
@@ -98,13 +98,38 @@ button {
   background:linear-gradient(135deg,var(--accent),#2563eb); color:white; cursor:pointer;
   box-shadow:0 8px 25px rgba(37,99,235,.4); position:relative; overflow:hidden;
 }
-button::after { content:''; position:absolute; inset:-50%; width:200%; height:200%; background:linear-gradient(45deg,transparent,rgba(255,255,255,.1),transparent); opacity:0; transition:.6s; }
-button:hover::after { opacity:1; animation:shine 1.5s infinite; }
 button:active { transform:scale(.96); }
 
 .secondary-btn { background:rgba(60,60,80,.6); color:#ccc; border:1px solid rgba(150,150,255,.2); backdrop-filter:blur(8px); }
 
-/* Host Tools (New) */
+/* NEW: Horizontal Code Row */
+.code-row { display: flex; align-items: center; justify-content: center; gap: 15px; margin: 10px 0 20px 0; }
+
+.code-display {
+  font:900 48px 'Orbitron',monospace; /* Slightly reduced for fit */
+  letter-spacing:6px; margin:0;
+  background:linear-gradient(90deg,#fbbf24,#f59e0b,#f97316); -webkit-background-clip:text; background-clip:text; color:transparent;
+  text-shadow:0 0 40px rgba(251,191,36,.6); animation:glow 3s ease-in-out infinite alternate;
+}
+
+/* NEW: Power Button (Compact) */
+.power-btn {
+    width: 64px; height: 64px; padding: 0; margin: 0;
+    border-radius: 18px; 
+    background: linear-gradient(135deg, #ef4444, #991b1b);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 15px rgba(239,68,68,0.4);
+    flex-shrink: 0;
+}
+.power-btn svg { width: 32px; height: 32px; fill: white; }
+
+.divider { position:relative; text-align:center; margin:24px 0; color:#666; font-size:13px; font-weight:600; }
+.divider span { background:var(--panel); padding:0 20px; position:relative; z-index:1; }
+.divider::before { content:''; position:absolute; top:50%; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,#444,transparent); }
+
+.hidden { display:none !important; }
+
+/* Host Tools */
 .host-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
 .tool-btn { font-size: 14px; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #aaa; }
 .tool-btn.active { background: rgba(59, 130, 246, 0.2); border-color: var(--accent); color: var(--accent); }
@@ -119,7 +144,15 @@ button:active { transform:scale(.96); }
 input:checked + .slider { background-color: var(--danger); box-shadow: 0 0 15px var(--danger); }
 input:checked + .slider:before { transform: translateX(26px); }
 
-/* Floating Gallery Button */
+/* Viewer Back Button */
+#viewer-back-btn {
+  position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 100;
+  padding: 16px 40px; background: linear-gradient(135deg, #ef4444, #991b1b); color: white;
+  border: none; border-radius: 50px; font-size: 18px; font-weight: bold;
+  box-shadow: 0 10px 30px rgba(239,68,68,.6); backdrop-filter: blur(10px);
+}
+
+/* Gallery & Animations */
 #fab-gallery {
   position: fixed; bottom: 180px; right: 20px; z-index: 900; 
   width: 60px; height: 60px; border-radius: 50%; 
@@ -130,53 +163,20 @@ input:checked + .slider:before { transform: translateX(26px); }
 }
 #fab-gallery:active { transform: scale(0.9); }
 
-/* Modal / Gallery */
-#gallery-modal {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 2000; display: none;
-  flex-direction: column; padding: 20px;
-}
+#gallery-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 2000; display: none; flex-direction: column; padding: 20px; }
 #gallery-modal.open { display: flex; }
 .gallery-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom:10px; border-bottom:1px solid #333; }
 .gallery-header h2 { color: var(--danger); font-family: 'Orbitron'; letter-spacing: 2px; font-size: 20px; }
 .close-modal { background: none; border: none; color: #fff; font-size: 30px; width: auto; padding: 0; box-shadow: none; margin:0; }
-
 .gallery-content { flex-grow: 1; overflow-y: auto; }
 .gallery-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding-bottom: 50px; }
-
 .gallery-item { position: relative; border: 1px solid #333; border-radius: 12px; overflow: hidden; background:#111; }
 .gallery-item img { width: 100%; height: 150px; object-fit: cover; display: block; }
 .gallery-info { padding: 10px; display: flex; justify-content: space-between; align-items: center; background: rgba(20,20,30,0.9); }
 .gallery-ts { color: var(--gold); font-size: 11px; font-family: monospace; }
-.download-btn {
-  background: var(--accent); color: white; border: none; border-radius: 6px; 
-  padding: 6px 12px; font-size: 11px; cursor: pointer; box-shadow: none; width: auto; margin:0;
-}
-.download-btn:active { transform: scale(0.95); }
+.download-btn { background: var(--accent); color: white; border: none; border-radius: 6px; padding: 6px 12px; font-size: 11px; cursor: pointer; box-shadow: none; width: auto; margin:0; }
 
-/* Code Display */
-.code-display {
-  font:900 64px 'Orbitron',monospace; text-align:center; letter-spacing:12px; margin:20px 0;
-  background:linear-gradient(90deg,#fbbf24,#f59e0b,#f97316); -webkit-background-clip:text; background-clip:text; color:transparent;
-  text-shadow:0 0 40px rgba(251,191,36,.6); animation:glow 3s ease-in-out infinite alternate;
-}
-.divider { position:relative; text-align:center; margin:24px 0; color:#666; font-size:13px; font-weight:600; }
-.divider span { background:var(--panel); padding:0 20px; position:relative; z-index:1; }
-.divider::before { content:''; position:absolute; top:50%; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,#444,transparent); }
-
-.hidden { display:none !important; }
-
-/* Back Button */
-#back-btn {
-  position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); z-index: 100;
-  padding: 16px 40px; background: linear-gradient(135deg, #ef4444, #991b1b); color: white;
-  border: none; border-radius: 50px; font-size: 18px; font-weight: bold;
-  box-shadow: 0 10px 30px rgba(239,68,68,.6); backdrop-filter: blur(10px);
-  animation: floatBtn 4s ease-in-out infinite;
-}
-
-/* Animations */
 @keyframes alertPulse { 0% { opacity:0.6; } 50% { opacity:1; } 100% { opacity:0.6; } }
-@keyframes floatBtn { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-12px); } }
 @keyframes blinker { 50% { opacity:.4; } }
 @keyframes pulse { 0%,100% { box-shadow:0 0 20px var(--live); } 50% { box-shadow:0 0 35px var(--live),0 0 50px rgba(16,185,129,.4); } }
 @keyframes logoPulse { from { transform:scale(1); } to { transform:scale(1.12); } }
@@ -197,7 +197,7 @@ input:checked + .slider:before { transform: translateX(26px); }
         <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#3b82f6" stroke-width="2" opacity=".3"/><path d="M9 8L16 12L9 16V8Z" fill="#3b82f6"/></svg>
       </div>
       <h2>IP Camera Pro</h2>
-      <p>v2.7 Enhanced</p>
+      <p>v2.9 UI Fix</p>
     </div>
   </div>
 
@@ -238,21 +238,25 @@ input:checked + .slider:before { transform: translateX(26px); }
 
   <div id="host-ui" class="hidden">
     <h3>Your Connection Code</h3>
-    <div id="my-code-display" class="code-display">...</div>
     
-    <div class="host-tools">
-        <button id="btn-torch" class="tool-btn" onclick="toggleTorch()">
-            ⚡ Flashlight
-        </button>
-        <button id="btn-mic" class="tool-btn" onclick="toggleMic()">
-            🎤 Mute Mic
+    <div class="code-row">
+        <div id="my-code-display" class="code-display">...</div>
+        <button class="power-btn" onclick="goBackToMenu()" title="Stop & Exit">
+            <svg viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
         </button>
     </div>
+    
+    <div class="host-tools">
+        <button id="btn-torch" class="tool-btn" onclick="toggleTorch()">⚡ Flashlight</button>
+        <button id="btn-mic" class="tool-btn" onclick="toggleMic()">🎤 Mute Mic</button>
+    </div>
 
-    <p style="text-align:center;color:#888;margin:10px 0 20px;">Enter this code on the other device</p>
+    <p style="text-align:center;color:#888;margin:15px 0;">Enter this code on the other device</p>
     <p id="security-status" style="text-align:center;color:var(--danger);font-weight:bold;display:none;">[ ANTI-THEFT ACTIVE ]</p>
   </div>
 </div>
+
+<button id="viewer-back-btn" class="hidden" onclick="goBackToMenu()">Disconnect</button>
 
 <div id="fab-gallery" class="hidden" onclick="openGallery()" title="Open Security Gallery">
   <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
@@ -272,8 +276,6 @@ input:checked + .slider:before { transform: translateX(26px); }
   </div>
 </div>
 
-<button id="back-btn" class="hidden" onclick="goBackToMenu()">Stop & Back to Menu</button>
-
 <script>
 const APP_PREFIX = "spck-cam-sec-v3-";
 const video = document.getElementById('vid');
@@ -281,7 +283,7 @@ const statusEl = document.getElementById('status');
 const viewerTag = document.getElementById('viewer-tag');
 const countSpan = document.getElementById('count');
 const codeDisplay = document.getElementById('my-code-display');
-const backBtn = document.getElementById('back-btn');
+const viewerBackBtn = document.getElementById('viewer-back-btn');
 const theftToggle = document.getElementById('theft-toggle');
 const motionAlert = document.getElementById('motion-alert');
 const galleryGrid = document.getElementById('gallery-grid');
@@ -292,12 +294,19 @@ let wakeLock = null;
 let isHost = false;
 let db = null;
 let heartbeatInterval = null;
-
-// Hardware State
 let isTorchOn = false;
 let isMicOn = true;
 
-// --- BATTERY STATUS ---
+// STUN Servers to fix connection issues
+const PEER_CONFIG = {
+    config: {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+        ]
+    }
+};
+
 async function initBattery() {
     if ('getBattery' in navigator) {
         const bat = await navigator.getBattery();
@@ -306,16 +315,13 @@ async function initBattery() {
             document.getElementById('bat-txt').innerText = level + '%';
             document.getElementById('bat-bar').style.width = level + '%';
             if(level < 20) document.getElementById('bat-bar').parentElement.classList.add('bat-low');
-            else document.getElementById('bat-bar').parentElement.classList.remove('bat-low');
         };
         update();
         bat.addEventListener('levelchange', update);
-        bat.addEventListener('chargingchange', update);
     }
 }
 initBattery();
 
-// --- DB CONNECTION ---
 function getDB() {
   return new Promise((resolve, reject) => {
     if (db) return resolve(db);
@@ -356,7 +362,6 @@ async function clearDatabase() {
     } catch(e) { console.error(e); }
 }
 
-// --- MOTION DETECTION ---
 let motionCanvas = document.createElement('canvas');
 let motionCtx = motionCanvas.getContext('2d');
 let lastImageData = null;
@@ -396,22 +401,18 @@ function triggerMotionAlert() {
   savePhoto(c.toDataURL('image/jpeg', 0.5));
 }
 
-// --- HARDWARE CONTROLS ---
 async function toggleTorch() {
     if(!localStream) return;
     const track = localStream.getVideoTracks()[0];
     const capabilities = track.getCapabilities();
-    
     if (capabilities.torch) {
         isTorchOn = !isTorchOn;
         try {
             await track.applyConstraints({ advanced: [{ torch: isTorchOn }] });
-            const btn = document.getElementById('btn-torch');
-            if(isTorchOn) btn.classList.add('active');
-            else btn.classList.remove('active');
-        } catch(e) { alert("Torch failed: " + e); }
+            document.getElementById('btn-torch').classList.toggle('active', isTorchOn);
+        } catch(e) {}
     } else {
-        alert("Flashlight not supported on this camera/device.");
+        alert("Flashlight not supported on this device.");
     }
 }
 
@@ -430,24 +431,15 @@ function toggleMic() {
     }
 }
 
-// --- CAMERA HANDLER ---
 async function getCameraStream() {
-    const constraints = {
-        video: { facingMode: { ideal: "environment" } },
-        audio: true
-    };
-    return await navigator.mediaDevices.getUserMedia(constraints);
+    return await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: { ideal: "environment" } }, 
+        audio: true 
+    });
 }
 
-// --- APP LOGIC ---
 async function requestWakeLock() {
-  try { 
-      wakeLock = await navigator.wakeLock.request('screen'); 
-      wakeLock.addEventListener('release', () => {
-         // Re-request if still streaming and became visible again
-         if(document.visibilityState === 'visible' && (isHost || activeConnections.length > 0)) requestWakeLock();
-      });
-  } catch(e){}
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
 }
 
 function showUI(mode) {
@@ -455,13 +447,15 @@ function showUI(mode) {
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('controls').style.display = mode === 'host' ? 'flex' : 'none';
   if(mode === 'host') document.getElementById('host-ui').classList.remove('hidden');
-  backBtn.classList.remove('hidden');
+  
+  if (mode === 'viewer') viewerBackBtn.classList.remove('hidden');
+  else viewerBackBtn.classList.add('hidden');
+
   requestWakeLock();
 }
 
 function goBackToMenu() {
   if (localStream) {
-      // Turn off torch before stopping
       const track = localStream.getVideoTracks()[0];
       if(track) track.applyConstraints({ advanced: [{ torch: false }] }).catch(e=>{});
       localStream.getTracks().forEach(t => t.stop());
@@ -476,7 +470,7 @@ function goBackToMenu() {
   document.getElementById('host-ui').classList.add('hidden');
   document.getElementById('controls').style.display = 'flex';
   viewerTag.classList.add('hidden');
-  backBtn.classList.add('hidden');
+  viewerBackBtn.classList.add('hidden');
   fabGallery.classList.add('hidden'); 
   statusEl.innerText = "Ready";
   video.srcObject = null;
@@ -489,7 +483,6 @@ function goBackToMenu() {
   document.getElementById('btn-mic').classList.remove('active');
 }
 
-// HEARTBEAT
 function startHeartbeat() {
     heartbeatInterval = setInterval(() => {
         if(!peer || peer.destroyed) return;
@@ -499,15 +492,13 @@ function startHeartbeat() {
     }, 5000);
 }
 
-// HOST
 function startHost() {
   isHost = true;
   const shortCode = Math.floor(1000 + Math.random() * 9000);
   codeDisplay.innerText = shortCode;
   
   const isArmed = theftToggle.checked;
-  if(isArmed) document.getElementById('security-status').style.display = 'block';
-  else document.getElementById('security-status').style.display = 'none';
+  document.getElementById('security-status').style.display = isArmed ? 'block' : 'none';
 
   getCameraStream()
     .then(stream => {
@@ -515,22 +506,18 @@ function startHost() {
       video.srcObject = stream;
       video.muted = true; 
       video.volume = 0;
-
-      video.play().catch(e => console.log("Play error:", e));
+      video.play().catch(e => console.log(e));
       showUI('host');
       
       if (isArmed) fabGallery.classList.remove('hidden');
-
       statusEl.innerText = isArmed ? "ARMED & STREAMING" : "Streaming Live";
       statusEl.style.color = isArmed ? "var(--danger)" : "white";
       
       if(isArmed) startMotionDetection();
 
-      peer = new Peer(APP_PREFIX + shortCode);
+      peer = new Peer(APP_PREFIX + shortCode, PEER_CONFIG);
       
       peer.on('error', err => {
-          console.error(err);
-          // Don't alert on peer-unavailable, just log
           if(err.type !== 'peer-unavailable') alert("Connection Error: " + err.type);
       });
 
@@ -542,20 +529,17 @@ function startHost() {
         conn.on('open', () => {
             conn.send({ type: 'SYNC_STATUS', security: isArmed });
         });
-
         conn.on('close', () => { 
             activeConnections = activeConnections.filter(c => c !== conn); 
             updateViewerCount(); 
         });
-        
         peer.call(conn.peer, stream);
         viewerTag.classList.remove('hidden');
       });
-      
       startHeartbeat();
     })
     .catch(e => {
-      alert("Camera Start Failed: " + e.message + "\nEnsure you are on HTTPS.");
+      alert("Camera Start Failed: " + e.message);
       goBackToMenu();
     });
 }
@@ -564,14 +548,14 @@ function updateViewerCount() {
   countSpan.innerText = activeConnections.length;
 }
 
-// VIEWER
 function startViewer() {
   const code = document.getElementById('remoteCode').value.trim();
   if (code.length !== 4) return alert("Enter 4-digit code");
   isHost = false;
   statusEl.innerText = "Connecting...";
   
-  peer = new Peer();
+  peer = new Peer(null, PEER_CONFIG);
+  
   peer.on('error', err => {
       alert("Connection failed. Check code or internet.");
       goBackToMenu();
@@ -594,7 +578,7 @@ function startViewer() {
         video.srcObject = stream;
         video.muted = false; 
         video.volume = 1;
-        video.play().catch(e => console.log("Play error:", e));
+        video.play().catch(e => console.log(e));
         viewerTag.classList.remove('hidden');
         countSpan.parentElement.style.display = 'none';
         statusEl.innerText = "Connected";
@@ -615,7 +599,6 @@ function handleData(conn) {
     if (data.type === 'LOG_DATA' && !isHost) {
       renderGallery(data.photos);
     }
-    // Ignore PING
   });
 }
 
