@@ -106,13 +106,13 @@ button:active { transform:scale(.96); }
 .code-row { display: flex; align-items: center; justify-content: center; gap: 15px; margin: 10px 0 20px 0; }
 
 .code-display {
-  font:900 48px 'Orbitron',monospace; /* Slightly reduced for fit */
+  font:900 48px 'Orbitron',monospace; 
   letter-spacing:6px; margin:0;
   background:linear-gradient(90deg,#fbbf24,#f59e0b,#f97316); -webkit-background-clip:text; background-clip:text; color:transparent;
   text-shadow:0 0 40px rgba(251,191,36,.6); animation:glow 3s ease-in-out infinite alternate;
 }
 
-/* NEW: Power Button (Compact) */
+/* Power Button (Compact) */
 .power-btn {
     width: 64px; height: 64px; padding: 0; margin: 0;
     border-radius: 18px; 
@@ -131,7 +131,7 @@ button:active { transform:scale(.96); }
 
 /* Host Tools */
 .host-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-.tool-btn { font-size: 14px; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #aaa; }
+.tool-btn { font-size: 14px; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #aaa; transition: 0.2s; }
 .tool-btn.active { background: rgba(59, 130, 246, 0.2); border-color: var(--accent); color: var(--accent); }
 
 /* Anti-Theft Toggle */
@@ -143,6 +143,22 @@ button:active { transform:scale(.96); }
 .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
 input:checked + .slider { background-color: var(--danger); box-shadow: 0 0 15px var(--danger); }
 input:checked + .slider:before { transform: translateX(26px); }
+
+/* Viewer Remote Controls (NEW) */
+#viewer-controls {
+  position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 15px; z-index: 100;
+}
+.remote-btn {
+  width: 50px; height: 50px; border-radius: 50%; border: none;
+  background: rgba(20,20,30,0.8); backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.1); color: white;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer;
+}
+.remote-btn:active { transform: scale(0.95); }
+.remote-btn.active { background: var(--accent); border-color: var(--accent-glow); box-shadow: 0 0 15px var(--accent); }
+.remote-btn svg { width: 24px; height: 24px; fill: currentColor; }
 
 /* Viewer Back Button */
 #viewer-back-btn {
@@ -197,7 +213,7 @@ input:checked + .slider:before { transform: translateX(26px); }
         <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#3b82f6" stroke-width="2" opacity=".3"/><path d="M9 8L16 12L9 16V8Z" fill="#3b82f6"/></svg>
       </div>
       <h2>IP Camera Pro</h2>
-      <p>v2.9 UI Fix</p>
+      <p>v3.0 Remote Control</p>
     </div>
   </div>
 
@@ -256,6 +272,15 @@ input:checked + .slider:before { transform: translateX(26px); }
   </div>
 </div>
 
+<div id="viewer-controls" class="hidden">
+    <button id="rem-torch" class="remote-btn" onclick="remoteToggleTorch()">
+        <svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+    </button>
+    <button id="rem-mic" class="remote-btn" onclick="remoteToggleMic()">
+        <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+    </button>
+</div>
+
 <button id="viewer-back-btn" class="hidden" onclick="goBackToMenu()">Disconnect</button>
 
 <div id="fab-gallery" class="hidden" onclick="openGallery()" title="Open Security Gallery">
@@ -288,6 +313,7 @@ const theftToggle = document.getElementById('theft-toggle');
 const motionAlert = document.getElementById('motion-alert');
 const galleryGrid = document.getElementById('gallery-grid');
 const fabGallery = document.getElementById('fab-gallery');
+const viewerControls = document.getElementById('viewer-controls');
 
 let peer, localStream, activeConnections = [];
 let wakeLock = null;
@@ -297,7 +323,6 @@ let heartbeatInterval = null;
 let isTorchOn = false;
 let isMicOn = true;
 
-// STUN Servers to fix connection issues
 const PEER_CONFIG = {
     config: {
         iceServers: [
@@ -401,7 +426,8 @@ function triggerMotionAlert() {
   savePhoto(c.toDataURL('image/jpeg', 0.5));
 }
 
-async function toggleTorch() {
+// --- HARDWARE CONTROLS (Updated with Broadcast) ---
+async function toggleTorch(fromRemote = false) {
     if(!localStream) return;
     const track = localStream.getVideoTracks()[0];
     const capabilities = track.getCapabilities();
@@ -409,9 +435,10 @@ async function toggleTorch() {
         isTorchOn = !isTorchOn;
         try {
             await track.applyConstraints({ advanced: [{ torch: isTorchOn }] });
-            document.getElementById('btn-torch').classList.toggle('active', isTorchOn);
+            updateHardwareUI();
+            broadcastState(); // Tell viewers status changed
         } catch(e) {}
-    } else {
+    } else if(!fromRemote) {
         alert("Flashlight not supported on this device.");
     }
 }
@@ -421,14 +448,44 @@ function toggleMic() {
     const track = localStream.getAudioTracks()[0];
     isMicOn = !isMicOn;
     track.enabled = isMicOn;
-    const btn = document.getElementById('btn-mic');
+    updateHardwareUI();
+    broadcastState(); // Tell viewers status changed
+}
+
+function updateHardwareUI() {
+    // Update Host UI
+    document.getElementById('btn-torch').classList.toggle('active', isTorchOn);
+    const micBtn = document.getElementById('btn-mic');
     if(!isMicOn) {
-        btn.classList.add('active');
-        btn.innerHTML = "🎤 MIC MUTED";
+        micBtn.classList.add('active');
+        micBtn.innerHTML = "🎤 MIC MUTED";
     } else {
-        btn.classList.remove('active');
-        btn.innerHTML = "🎤 Mute Mic";
+        micBtn.classList.remove('active');
+        micBtn.innerHTML = "🎤 Mute Mic";
     }
+}
+
+// Viewer Remote Functions
+function remoteToggleTorch() {
+    if(activeConnections[0]) activeConnections[0].send({type: 'REMOTE_TORCH'});
+}
+
+function remoteToggleMic() {
+    if(activeConnections[0]) activeConnections[0].send({type: 'REMOTE_MIC'});
+}
+
+function updateViewerUI(state) {
+    // Update Viewer UI based on Host State
+    document.getElementById('rem-torch').classList.toggle('active', state.torch);
+    document.getElementById('rem-mic').classList.toggle('active', !state.mic); // Red if muted
+}
+
+// --- STATE SYNC ---
+function broadcastState() {
+    const state = { type: 'STATE_UPDATE', torch: isTorchOn, mic: isMicOn };
+    activeConnections.forEach(conn => {
+        if(conn.open) conn.send(state);
+    });
 }
 
 async function getCameraStream() {
@@ -448,8 +505,14 @@ function showUI(mode) {
   document.getElementById('controls').style.display = mode === 'host' ? 'flex' : 'none';
   if(mode === 'host') document.getElementById('host-ui').classList.remove('hidden');
   
-  if (mode === 'viewer') viewerBackBtn.classList.remove('hidden');
-  else viewerBackBtn.classList.add('hidden');
+  // UI LOGIC
+  if (mode === 'viewer') {
+      viewerBackBtn.classList.remove('hidden');
+      viewerControls.classList.remove('hidden');
+  } else {
+      viewerBackBtn.classList.add('hidden');
+      viewerControls.classList.add('hidden');
+  }
 
   requestWakeLock();
 }
@@ -471,6 +534,7 @@ function goBackToMenu() {
   document.getElementById('controls').style.display = 'flex';
   viewerTag.classList.add('hidden');
   viewerBackBtn.classList.add('hidden');
+  viewerControls.classList.add('hidden');
   fabGallery.classList.add('hidden'); 
   statusEl.innerText = "Ready";
   video.srcObject = null;
@@ -478,9 +542,7 @@ function goBackToMenu() {
   isHost = false;
   isTorchOn = false; 
   isMicOn = true;
-  document.getElementById('btn-torch').classList.remove('active');
-  document.getElementById('btn-mic').innerHTML = "🎤 Mute Mic";
-  document.getElementById('btn-mic').classList.remove('active');
+  updateHardwareUI();
 }
 
 function startHeartbeat() {
@@ -528,6 +590,8 @@ function startHost() {
         
         conn.on('open', () => {
             conn.send({ type: 'SYNC_STATUS', security: isArmed });
+            // Send initial hardware state to new viewer
+            conn.send({ type: 'STATE_UPDATE', torch: isTorchOn, mic: isMicOn });
         });
         conn.on('close', () => { 
             activeConnections = activeConnections.filter(c => c !== conn); 
@@ -589,15 +653,23 @@ function startViewer() {
 
 function handleData(conn) {
   conn.on('data', data => {
-    if (data.type === 'SYNC_STATUS' && !isHost) {
-        if (data.security) fabGallery.classList.remove('hidden');
-        else fabGallery.classList.add('hidden');
+    // HOST LOGIC: Receive commands
+    if (isHost) {
+        if (data.type === 'GET_LOGS') {
+            getAllPhotos(photos => conn.send({ type: 'LOG_DATA', photos: photos ? photos.reverse() : [] }));
+        }
+        if (data.type === 'REMOTE_TORCH') toggleTorch(true);
+        if (data.type === 'REMOTE_MIC') toggleMic();
     }
-    if (data.type === 'GET_LOGS' && isHost) {
-      getAllPhotos(photos => conn.send({ type: 'LOG_DATA', photos: photos ? photos.reverse() : [] }));
-    }
-    if (data.type === 'LOG_DATA' && !isHost) {
-      renderGallery(data.photos);
+
+    // VIEWER LOGIC: Receive Updates
+    if (!isHost) {
+        if (data.type === 'SYNC_STATUS') {
+            if (data.security) fabGallery.classList.remove('hidden');
+            else fabGallery.classList.add('hidden');
+        }
+        if (data.type === 'LOG_DATA') renderGallery(data.photos);
+        if (data.type === 'STATE_UPDATE') updateViewerUI(data);
     }
   });
 }
