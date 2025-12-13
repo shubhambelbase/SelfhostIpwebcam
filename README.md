@@ -1,6 +1,6 @@
 # 🎥 IP Camera Pro (Secure P2P)
 
-![Version](https://img.shields.io/badge/version-3.0-blue.svg) ![License](https://img.shields.io/badge/license-MIT-green.svg) ![WebRTC](https://img.shields.io/badge/tech-WebRTC%20%7C%20PeerJS-orange)
+![Version](https://img.shields.io/badge/version-3.0-blue.svg) ![LICENSE](https://img.shields.io/badge/license-MIT-green.svg) ![WebRTC](https://img.shields.io/badge/tech-WebRTC%20%7C%20PeerJS-orange)
 
 A powerful, **single-file** browser-based surveillance system. Turn any device (smartphone, tablet, laptop) into a security camera and view the feed remotely with full control.
 
