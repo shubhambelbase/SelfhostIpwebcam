@@ -23,7 +23,7 @@ A powerful, **single-file** browser-based surveillance system. Turn any device (
 
 ## 📸 Screenshots
 
-| Host Screen | Viewer Controls | Approval Modal |
+| Host Screen | Viewer Screen | Approval |
 |:---:|:---:|:---:|
 | <img src="/host.jpg" width="250"> | <img src="/viewer.jpg" width="250"> | <img src="/approval.jpg" width="250"> |
 
