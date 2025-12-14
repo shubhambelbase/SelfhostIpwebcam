@@ -19,12 +19,9 @@
   </p>
 
   <h3>
-    <a href="https://shubhambelbase.github.io/IP_Camera_Pro/">
-[🚀 View Live Demo](https://wicam.netlify.app)
-
+    <a href="https://wicam.netlify.app">🔴 View Live Demo</a>
   </h3>
 </div>
-
 ---
 
 ## ⚡ The Vibe
