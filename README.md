@@ -19,7 +19,7 @@
   </p>
 
   <h3>
-    <a href="https://shubhambelbase.github.io/IP_Camera_Pro/">🔴 View Live Demo</a>
+    <a href="https://shubhambelbase.github.io/IP_Camera_Pro/">🔴 View Live Demo</a> https://wicam.netlify.app
   </h3>
 </div>
 
