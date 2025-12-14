@@ -72,11 +72,11 @@ Because this app requires camera and microphone permissions, **it must be run vi
 ### Option 2: Local Network
 1.  **Clone the repo:**
     ```bash
-    git clone [https://github.com/shubhambelbase/IP_Camera_Pro.git](https://github.com/shubhambelbase/IP_Camera_Pro.git)
+    git clone [https://github.com/shubhambelbase/SelfhostIpwebcam.git](https://github.com/shubhambelbase/SelfhostIpwebcam.git)
     ```
 2.  **Navigate to folder:**
     ```bash
-    cd IP_Camera_Pro
+    cd SelfhostIpwebcam
     ```
 3.  **Run with a secure server:**
     (VS Code "Live Server" works great, or use Python)
