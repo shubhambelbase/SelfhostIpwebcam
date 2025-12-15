@@ -504,11 +504,17 @@ const captureCanvas = document.createElement('canvas');
 const motionCanvas = document.createElement('canvas');
 const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
 
+// === OPTIMIZATION: Better ICE servers (more reliable connection) ===
 const PEER_CONFIG = {
     config: {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478' }
+            { urls: 'stun:global.stun.twilio.com:3478' },
+            { urls: 'stun:stun.voipbuster.com:3478' },
+            { urls: 'stun:stun.schlund.de:3478' },
+            // Free open TURN server (limited bandwidth, but helps in tough networks)
+            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
         ]
     }
 };
@@ -534,9 +540,11 @@ async function initBattery() {
             document.getElementById('bat-txt').innerText = level + '%';
             document.getElementById('bat-bar').style.width = level + '%';
             if(level < 20) document.getElementById('bat-bar').parentElement.classList.add('bat-low');
+            else document.getElementById('bat-bar').parentElement.classList.remove('bat-low');
         };
         update();
         bat.addEventListener('levelchange', update);
+        bat.addEventListener('chargingchange', update);
     }
 }
 initBattery();
@@ -581,11 +589,18 @@ async function clearDatabase() {
     } catch(e) { console.error(e); }
 }
 
+// === OPTIMIZATION: Motion detection improvements ===
 let lastImageData = null;
 let motionInterval = null;
 let lastCaptureTime = 0;
+let recentMotion = false;
+let adaptiveInterval = 500; // ms
 
 function startMotionDetection() {
+  clearInterval(motionInterval);
+  adaptiveInterval = 500;
+  recentMotion = false;
+
   motionInterval = setInterval(() => {
     if (!localStream || !theftToggle.checked) {
         document.getElementById('security-status').style.display = 'none';
@@ -606,11 +621,37 @@ function startMotionDetection() {
 
     const w = 320, h = 240;
     if (motionCanvas.width !== w) { motionCanvas.width = w; motionCanvas.height = h; }
-    motionCtx.drawImage(video, 0, 0, w, h);
+
+    // === OPTIMIZATION: Only check center 50% of frame (ROI) ===
+    const srcX = w * 0.25;
+    const srcY = h * 0.25;
+    const srcW = w * 0.5;
+    const srcH = h * 0.5;
+    motionCtx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, w, h);
+
     const frame = motionCtx.getImageData(0, 0, w, h);
-    if (lastImageData) checkDiff(lastImageData.data, frame.data, w, h);
+    if (lastImageData) {
+      const moved = checkDiff(lastImageData.data, frame.data, w, h);
+      if (moved) {
+        recentMotion = true;
+        triggerMotionAlert();
+        // Reset adaptive slowdown on motion
+        adaptiveInterval = 500;
+        clearInterval(motionInterval);
+        startMotionDetection(); // restart with fast interval
+      }
+    }
     lastImageData = frame;
-  }, 500);
+  }, adaptiveInterval);
+
+  // === OPTIMIZATION: Slow down to 2s if no motion for 15 seconds ===
+  setTimeout(() => {
+    if (!recentMotion && theftToggle.checked) {
+      adaptiveInterval = 2000;
+      clearInterval(motionInterval);
+      startMotionDetection();
+    }
+  }, 15000);
 }
 
 function toggleMotion() {
@@ -623,38 +664,48 @@ function toggleMotion() {
         statusTxt.innerText = "[ MOTION DETECTOR: ON ]";
         statusTxt.style.color = "var(--danger)";
         showToast("Motion Detection Enabled");
+        recentMotion = false;
+        startMotionDetection();
     } else {
         btn.classList.remove('active');
         statusTxt.innerText = "[ MOTION DETECTOR: OFF ]";
         statusTxt.style.color = "#888"; 
         statusTxt.style.display = 'block'; 
         showToast("Motion Detection Disabled");
+        clearInterval(motionInterval);
     }
     broadcastState();
 }
 
+// Faster luminance-only comparison + cooldown
 function checkDiff(prev, curr, w, h) {
   let diffCount = 0;
-  const sensitivity = parseInt(sensSlider.value); 
-  for (let i = 0; i < curr.length; i += 16) { 
-    if (Math.abs(prev[i] - curr[i]) + Math.abs(prev[i+1] - curr[i+1]) + Math.abs(prev[i+2] - curr[i+2]) > sensitivity) diffCount++;
+  const sensitivity = parseInt(sensSlider.value);
+  const totalPixels = w * h;
+
+  for (let i = 0; i < curr.length; i += 16) {
+    const lumPrev = prev[i] * 0.299 + prev[i+1] * 0.587 + prev[i+2] * 0.114;
+    const lumCurr = curr[i] * 0.299 + curr[i+1] * 0.587 + curr[i+2] * 0.114;
+    if (Math.abs(lumPrev - lumCurr) > sensitivity / 10) diffCount++;
   }
-  if (diffCount > (w * h / 16) * 0.05) triggerMotionAlert();
+
+  return diffCount > totalPixels * 0.004; // ~0.4% changed pixels
 }
 
 function triggerMotionAlert() {
   const now = Date.now();
-  if (now - lastCaptureTime < 3000) return;
+  if (now - lastCaptureTime < 4000) return; // 4s cooldown
   lastCaptureTime = now;
+
   motionAlert.classList.add('active');
   setTimeout(() => motionAlert.classList.remove('active'), 1000);
   
-  captureCanvas.width = video.videoWidth;
-  captureCanvas.height = video.videoHeight;
+  captureCanvas.width = video.videoWidth || 1280;
+  captureCanvas.height = video.videoHeight || 720;
   const ctx = captureCanvas.getContext('2d');
-  ctx.drawImage(video, 0, 0);
+  ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
   
-  savePhoto(captureCanvas.toDataURL('image/jpeg', 0.3));
+  savePhoto(captureCanvas.toDataURL('image/jpeg', 0.4));
   showToast("Motion Detected! Saved to Log.");
 }
 
@@ -701,7 +752,8 @@ function toggleRecording() {
 function initAudioVisualizer(stream) {
   visualizerCanvas = document.getElementById('audio-visualizer');
   canvasCtx = visualizerCanvas.getContext('2d');
-  visualizerCanvas.width = visualizerCanvas.offsetWidth; visualizerCanvas.height = visualizerCanvas.offsetHeight;
+  visualizerCanvas.width = visualizerCanvas.offsetWidth * devicePixelRatio;
+  visualizerCanvas.height = visualizerCanvas.offsetHeight * devicePixelRatio;
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioContext.createMediaStreamSource(stream);
   analyser = audioContext.createAnalyser();
@@ -751,37 +803,36 @@ function toggleNightMode() {
     broadcastState();
 }
 
-// Fixed Camera Switching Logic
 async function switchCamera() {
     if (!localStream) return;
     
-    // Stop current video track
     localStream.getVideoTracks().forEach(track => track.stop());
     
-    // Toggle Mode
     currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
     
     try {
         const newStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: { ideal: currentFacingMode } },
+            video: { 
+                facingMode: { ideal: currentFacingMode },
+                width: { ideal: 1280, max: 1280 },
+                height: { ideal: 720, max: 720 },
+                frameRate: { ideal: 20, max: 24 }
+            },
             audio: false 
         });
         
         const newVideoTrack = newStream.getVideoTracks()[0];
         
-        // Restore torch state if on environment
         if (currentFacingMode === "environment" && isTorchOn) {
             try { await newVideoTrack.applyConstraints({ advanced: [{ torch: true }] }); } catch(e){}
         }
 
-        // Replace track in local stream (for visualizer/recording)
         const oldVideoTrack = localStream.getVideoTracks()[0];
         localStream.removeTrack(oldVideoTrack);
         localStream.addTrack(newVideoTrack);
         
         video.srcObject = localStream;
         
-        // Robust Track Replacement for ALL connections
         activeConnections.forEach(conn => {
             if(peer && peer.connections[conn.peer]) {
                 peer.connections[conn.peer].forEach(pcWrapper => {
@@ -801,7 +852,6 @@ async function switchCamera() {
         console.error(e);
     }
 }
-
 
 function toggleMic() {
     if(!localStream) return;
@@ -833,24 +883,10 @@ function toggleEcoMode() {
     eco.classList.toggle('hidden');
 }
 
-function toggleFullScreen() {
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(e => console.log(e));
-    } else {
-        if (document.exitFullscreen) document.exitFullscreen();
-    }
-}
-
 function remoteToggleTorch() {
     if(activeConnections[0] && activeConnections[0].open) {
         activeConnections[0].send({type: 'REMOTE_TORCH'});
         animateButton('rem-torch');
-    }
-}
-
-function remoteToggleMotion() {
-    if(activeConnections[0] && activeConnections[0].open) {
-        activeConnections[0].send({type: 'REMOTE_MOTION_TOGGLE'});
     }
 }
 
@@ -877,16 +913,16 @@ function animateButton(id) {
 function takeRemoteSnapshot() {
     if(!video.srcObject) return;
     const cvs = document.createElement('canvas');
-    cvs.width = video.videoWidth;
-    cvs.height = video.videoHeight;
+    cvs.width = video.videoWidth || 1280;
+    cvs.height = video.videoHeight || 720;
     const ctx = cvs.getContext('2d');
     
     if(video.classList.contains('night-vision-mode')) {
         ctx.filter = 'grayscale(100%) contrast(150%) brightness(130%) sepia(20%) hue-rotate(180deg)';
     }
     
-    ctx.drawImage(video, 0, 0);
-    const data = cvs.toDataURL('image/jpeg');
+    ctx.drawImage(video, 0, 0, cvs.width, cvs.height);
+    const data = cvs.toDataURL('image/jpeg', 0.8);
     const link = document.createElement('a');
     link.href = data;
     link.download = `remote_snapshot_${Date.now()}.jpg`;
@@ -902,11 +938,9 @@ function toggleRemoteSpeaker() {
         video.muted = false;
         video.volume = 1.0;
         btn.classList.add('active');
-        btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg><span>Sound ON</span>`;
     } else {
         video.muted = true;
         btn.classList.remove('active');
-        btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg><span>Muted</span>`;
     }
 }
 
@@ -937,9 +971,15 @@ function broadcastState() {
     });
 }
 
+// === OPTIMIZATION: Lower resolution + capped frame rate for better battery ===
 async function getCameraStream() {
     return await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: { ideal: currentFacingMode } },
+        video: { 
+            facingMode: { ideal: currentFacingMode },
+            width: { ideal: 1280, max: 1280 },
+            height: { ideal: 720, max: 720 },
+            frameRate: { ideal: 20, max: 24 }
+        },
         audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -964,7 +1004,6 @@ function showUI(mode) {
       video.muted = true; 
       const btn = document.getElementById('rem-spk');
       btn.classList.remove('active');
-      btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg><span>Muted</span>`;
   } else {
       viewerBackBtn.classList.add('hidden');
       viewerControls.classList.add('hidden');
@@ -1190,9 +1229,8 @@ function handleData(conn) {
     if (isHost) {
         if (data.type === 'GET_LOGS') getAllPhotos(photos => conn.send({ type: 'LOG_DATA', photos: photos ? photos.reverse() : [] }));
         if (data.type === 'REMOTE_TORCH') toggleTorch(true);
-        if (data.type === 'REMOTE_MOTION_TOGGLE') toggleMotion();
-        if (data.type === 'REMOTE_SWITCH_CAM') switchCamera(); // NEW
-        if (data.type === 'REMOTE_NIGHT_TOGGLE') toggleNightMode(); // NEW
+        if (data.type === 'REMOTE_SWITCH_CAM') switchCamera();
+        if (data.type === 'REMOTE_NIGHT_TOGGLE') toggleNightMode();
     }
     if (!isHost) {
         if (data.type === 'ACCESS_DENIED') {
