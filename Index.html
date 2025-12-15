@@ -170,7 +170,7 @@ button:active { transform:scale(.98); }
 .divider::before { content:''; position:absolute; top:50%; left:0; right:0; height:1px; background:#333; }
 .hidden { display:none !important; }
 
-.host-tools { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-top: 5px; }
+.host-tools { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 5px; }
 .tool-btn { font-size: 10px; padding: 14px 2px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #aaa; transition: 0.2s; white-space: nowrap; text-align: center;}
 .tool-btn.active { background: rgba(59, 130, 246, 0.2); border-color: var(--accent); color: var(--accent); }
 .tool-btn.recording { background: rgba(239, 68, 68, 0.2); border-color: var(--danger); color: var(--danger); animation: pulse 1s infinite; }
@@ -249,7 +249,7 @@ input:checked + .slider:before { transform: translateX(22px); }
     font-weight: 700;
 }
 
-/* Toast System for Hardening */
+/* Toast System */
 #toast {
     visibility: hidden; min-width: 200px; max-width: 90%; background-color: rgba(30,30,40,0.95); color: #fff;
     text-align: center; border-radius: 50px; padding: 12px 24px; position: fixed;
@@ -278,6 +278,12 @@ input:checked + .slider:before { transform: translateX(22px); }
 .approval-box p { color: #fff; margin-bottom: 20px; font-size: 16px; font-weight: 600; }
 .approval-btns { display: flex; gap: 10px; }
 
+#eco-overlay {
+    position: fixed; inset: 0; background: #000; z-index: 5000;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+}
+
 @keyframes alertPulse { 0% { opacity:0.6; } 50% { opacity:1; } 100% { opacity:0.6; } }
 @keyframes blinker { 50% { opacity:.4; } }
 @keyframes pulse { 0%,100% { box-shadow:0 0 20px var(--live); } 50% { box-shadow:0 0 35px var(--live),0 0 50px rgba(16,185,129,.4); } }
@@ -287,6 +293,13 @@ input:checked + .slider:before { transform: translateX(22px); }
 </style>
 </head>
 <body>
+
+<div id="eco-overlay" class="hidden" onclick="toggleEcoMode()">
+    <div style="text-align:center; opacity:0.3; color:#333;">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8 8 8z"/></svg>
+        <p style="font-family:monospace; margin-top:10px;">TAP TO WAKE</p>
+    </div>
+</div>
 
 <div id="video-container">
   <video id="vid" autoplay playsinline muted></video>
@@ -329,7 +342,7 @@ input:checked + .slider:before { transform: translateX(22px); }
     <div class="security-row">
       <div class="security-label">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
-        ANTI-THEFT
+        MOTION DETECTOR
       </div>
       <label class="toggle-switch">
         <input type="checkbox" id="theft-toggle">
@@ -356,17 +369,25 @@ input:checked + .slider:before { transform: translateX(22px); }
     </div>
     <div class="host-tools">
         <button id="btn-torch" class="tool-btn" onclick="toggleTorch()">⚡ Flash</button>
+        <button id="btn-motion" class="tool-btn" onclick="toggleMotion()">🏃 Motion</button>
+        <button class="tool-btn" onclick="toggleEcoMode()">🌙 Eco</button>
+        <button class="tool-btn" onclick="toggleFullScreen()">⛶ Full</button>
         <button id="btn-mic" class="tool-btn" onclick="toggleMic()">🎤 Mic</button>
         <button id="btn-record" class="tool-btn" onclick="toggleRecording()">REC ●</button>
         <button id="btn-speaker" class="tool-btn active" onclick="toggleHostSpeaker()">🔊 Spkr</button>
     </div>
     <div class="divider" style="margin: 10px 0 5px 0;"><span>DIGITAL ZOOM</span></div>
     <input type="range" id="zoom-slider" min="1" max="4" step="0.1" value="1" oninput="setZoom(this.value)">
-    <p id="security-status" style="text-align:center;color:var(--danger);font-weight:bold;display:none;font-size:12px;margin-top:10px;">[ ANTI-THEFT ACTIVE ]</p>
+    <p id="security-status" style="text-align:center;color:var(--danger);font-weight:bold;display:none;font-size:12px;margin-top:10px;">[ MOTION DETECTOR: ON ]</p>
   </div>
 </div>
 
 <div id="viewer-controls" class="hidden">
+    <button id="rem-motion" class="remote-btn" onclick="remoteToggleMotion()">
+        <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+        <span>Motion</span>
+    </button>
+
     <button id="rem-spk" class="remote-btn" onclick="toggleRemoteSpeaker()">
         <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
         <span>Speaker</span>
@@ -444,17 +465,14 @@ let isMicOn = true;
 let isSpeakerOn = true; 
 let toastTimeout;
 
-// FIX 1: Connection Queue to prevent race conditions
-let connectionQueue = []; // Replaces pendingConn
+let connectionQueue = [];
 let isHandlingConnection = false;
 
-// New Global Vars
 let mediaRecorder;
 let recordedChunks = [];
 let isRecording = false;
 let audioContext, analyser, dataArray, canvasCtx, visualizerCanvas;
 
-// FIX 2: Global Canvas for reuse (Memory Leak Fix)
 const captureCanvas = document.createElement('canvas'); 
 const motionCanvas = document.createElement('canvas');
 const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
@@ -542,7 +560,23 @@ let lastCaptureTime = 0;
 
 function startMotionDetection() {
   motionInterval = setInterval(() => {
-    if (!localStream || !theftToggle.checked) return;
+    if (!localStream || !theftToggle.checked) {
+        document.getElementById('security-status').style.display = 'none';
+        document.getElementById('btn-motion').classList.remove('active');
+        if(statusEl.innerText.includes("ARMED")) {
+             statusEl.innerText = "Streaming";
+             statusEl.style.color = "white";
+        }
+        return;
+    }
+    
+    document.getElementById('security-status').style.display = 'block';
+    document.getElementById('btn-motion').classList.add('active');
+    if(!statusEl.innerText.includes("ARMED")) {
+        statusEl.innerText = "ARMED & STREAMING";
+        statusEl.style.color = "var(--danger)";
+    }
+
     const w = 320, h = 240;
     if (motionCanvas.width !== w) { motionCanvas.width = w; motionCanvas.height = h; }
     motionCtx.drawImage(video, 0, 0, w, h);
@@ -550,6 +584,27 @@ function startMotionDetection() {
     if (lastImageData) checkDiff(lastImageData.data, frame.data, w, h);
     lastImageData = frame;
   }, 500);
+}
+
+function toggleMotion() {
+    theftToggle.checked = !theftToggle.checked;
+    const btn = document.getElementById('btn-motion');
+    const statusTxt = document.getElementById('security-status');
+    
+    if(theftToggle.checked) {
+        btn.classList.add('active');
+        statusTxt.innerText = "[ MOTION DETECTOR: ON ]";
+        statusTxt.style.color = "var(--danger)";
+        showToast("Motion Detection Enabled");
+    } else {
+        btn.classList.remove('active');
+        statusTxt.innerText = "[ MOTION DETECTOR: OFF ]";
+        statusTxt.style.color = "#888"; 
+        statusTxt.style.display = 'block'; 
+        showToast("Motion Detection Disabled");
+    }
+    // Update remote viewers
+    broadcastState();
 }
 
 function checkDiff(prev, curr, w, h) {
@@ -560,7 +615,6 @@ function checkDiff(prev, curr, w, h) {
   if (diffCount > (w * h / 16) * 0.05) triggerMotionAlert();
 }
 
-// FIX 2 & 4: Reusing canvas and Compressing Image
 function triggerMotionAlert() {
   const now = Date.now();
   if (now - lastCaptureTime < 3000) return;
@@ -568,13 +622,11 @@ function triggerMotionAlert() {
   motionAlert.classList.add('active');
   setTimeout(() => motionAlert.classList.remove('active'), 1000);
   
-  // Reuse the global canvas
   captureCanvas.width = video.videoWidth;
   captureCanvas.height = video.videoHeight;
   const ctx = captureCanvas.getContext('2d');
   ctx.drawImage(video, 0, 0);
   
-  // FIX 4: Lower quality (0.3) to prevent Data Channel Crash
   savePhoto(captureCanvas.toDataURL('image/jpeg', 0.3));
   showToast("Motion Detected! Saved to Log.");
 }
@@ -684,10 +736,33 @@ function updateHardwareUI() {
     else { micBtn.classList.remove('active'); micBtn.innerHTML = "🎤 Mic"; }
 }
 
+function toggleEcoMode() {
+    const eco = document.getElementById('eco-overlay');
+    eco.classList.toggle('hidden');
+}
+
+function toggleFullScreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(e => console.log(e));
+    } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+    }
+}
+
 function remoteToggleTorch() {
     if(activeConnections[0] && activeConnections[0].open) {
         activeConnections[0].send({type: 'REMOTE_TORCH'});
         const btn = document.getElementById('rem-torch');
+        btn.style.borderColor = 'var(--accent)';
+        setTimeout(() => btn.style.borderColor = 'rgba(255,255,255,0.2)', 200);
+    }
+}
+
+// NEW: Send command to toggle motion on host
+function remoteToggleMotion() {
+    if(activeConnections[0] && activeConnections[0].open) {
+        activeConnections[0].send({type: 'REMOTE_MOTION_TOGGLE'});
+        const btn = document.getElementById('rem-motion');
         btn.style.borderColor = 'var(--accent)';
         setTimeout(() => btn.style.borderColor = 'rgba(255,255,255,0.2)', 200);
     }
@@ -723,16 +798,18 @@ function stopTalking() {
 
 function updateViewerUI(state) {
     document.getElementById('rem-torch').classList.toggle('active', state.torch);
+    // NEW: Update motion button state
+    document.getElementById('rem-motion').classList.toggle('active', state.motion);
 }
 
 function broadcastState() {
-    const state = { type: 'STATE_UPDATE', torch: isTorchOn, mic: isMicOn };
+    // UPDATED: Include motion state
+    const state = { type: 'STATE_UPDATE', torch: isTorchOn, mic: isMicOn, motion: theftToggle.checked };
     activeConnections.forEach(conn => {
         if(conn.open) conn.send(state);
     });
 }
 
-// FIX 3: Audio Feedback Loop Fix (Constraints)
 async function getCameraStream() {
     return await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: { ideal: "environment" } }, 
@@ -786,7 +863,7 @@ function goBackToMenu() {
   clearInterval(motionInterval);
   clearInterval(heartbeatInterval);
   activeConnections = [];
-  connectionQueue = []; // Clear queue
+  connectionQueue = []; 
   approvalModal.classList.remove('active');
   
   document.body.classList.remove('streaming');
@@ -798,6 +875,8 @@ function goBackToMenu() {
   viewerControls.classList.add('hidden');
   fabGallery.classList.add('hidden'); 
   statusEl.innerText = "Ready";
+  statusEl.style.color = "#e0e0ff";
+  document.getElementById('security-status').style.display = 'none';
   video.srcObject = null;
   countSpan.innerText = "0";
   isHost = false;
@@ -814,7 +893,6 @@ function startHeartbeat() {
     }, 5000);
 }
 
-// FIX 1: Process Connection Queue
 function processConnectionQueue() {
     if (connectionQueue.length > 0 && !approvalModal.classList.contains('active')) {
         approvalModal.classList.add('active');
@@ -823,7 +901,6 @@ function processConnectionQueue() {
 
 function approveConnection() {
     approvalModal.classList.remove('active');
-    // FIX 1: Get next from queue
     const conn = connectionQueue.shift(); 
     
     if(!conn) return;
@@ -840,20 +917,19 @@ function approveConnection() {
         remoteAudio.play().catch(e => console.log("Audio play err", e));
     });
 
+    // Send initial status including motion state
     conn.send({ type: 'SYNC_STATUS', security: isArmed });
-    conn.send({ type: 'STATE_UPDATE', torch: isTorchOn, mic: isMicOn });
+    conn.send({ type: 'STATE_UPDATE', torch: isTorchOn, mic: isMicOn, motion: isArmed });
     conn.send({ type: 'ZOOM_SYNC', value: document.getElementById('zoom-slider').value });
 
     viewerTag.classList.remove('hidden');
     showToast("Viewer Connected");
     
-    // Check if more are waiting
     setTimeout(processConnectionQueue, 500);
 }
 
 function denyConnection() {
     approvalModal.classList.remove('active');
-    // FIX 1: Get next from queue
     const conn = connectionQueue.shift();
     
     if(conn) {
@@ -861,7 +937,6 @@ function denyConnection() {
         setTimeout(() => { conn.close(); }, 500);
     }
     
-    // Check if more are waiting
     setTimeout(processConnectionQueue, 500);
 }
 
@@ -870,21 +945,18 @@ function startHost() {
   const shortCode = Math.floor(1000 + Math.random() * 9000);
   codeDisplay.innerText = shortCode;
   
-  const isArmed = theftToggle.checked;
-  document.getElementById('security-status').style.display = isArmed ? 'block' : 'none';
-
   getCameraStream().then(stream => {
       localStream = stream;
       video.srcObject = stream;
       video.muted = true; video.volume = 0; 
       video.play().catch(e => console.log(e));
       showUI('host');
+      fabGallery.classList.remove('hidden');
+
       initAudioVisualizer(stream); 
       
-      if (isArmed) fabGallery.classList.remove('hidden');
-      statusEl.innerText = isArmed ? "ARMED & STREAMING" : "Streaming";
-      statusEl.style.color = isArmed ? "var(--danger)" : "white";
-      if(isArmed) startMotionDetection();
+      statusEl.innerText = "Streaming";
+      startMotionDetection(); 
 
       peer = new Peer(APP_PREFIX + shortCode, PEER_CONFIG);
       peer.on('error', err => { 
@@ -899,13 +971,11 @@ function startHost() {
       });
 
       peer.on('connection', conn => {
-          // FIX 1: Add to queue logic
           conn.on('open', () => {
               connectionQueue.push(conn);
               processConnectionQueue();
           });
           conn.on('close', () => {
-              // Remove from active or queue
               activeConnections = activeConnections.filter(c => c !== conn);
               connectionQueue = connectionQueue.filter(c => c !== conn);
               updateViewerCount();
@@ -923,7 +993,6 @@ function startViewer() {
   const code = document.getElementById('remoteCode').value.trim();
   if (code.length !== 4) return showToast("Enter 4-digit code");
   
-  // FIX 3: Add constraints here too for 2-way audio safety
   navigator.mediaDevices.getUserMedia({ 
       audio: {
           echoCancellation: true,
@@ -965,9 +1034,21 @@ function startViewer() {
         peer.on('call', call => {
           call.answer(viewerStream);
           call.on('stream', stream => {
+            // FIX: Prevent re-loading same stream
+            if (video.srcObject && video.srcObject.id === stream.id) return;
+            
             video.srcObject = stream;
             video.muted = true; 
-            video.play().catch(e => console.log(e));
+            
+            // FIX: Handle AbortError safely
+            const playPromise = video.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    if (error.name === 'AbortError') console.log("Stream play interrupted (normal)");
+                    else console.error("Play error:", error);
+                });
+            }
+
             viewerTag.classList.remove('hidden');
             countSpan.parentElement.style.display = 'none';
             statusEl.innerText = "Connected";
@@ -985,6 +1066,8 @@ function handleData(conn) {
     if (isHost) {
         if (data.type === 'GET_LOGS') getAllPhotos(photos => conn.send({ type: 'LOG_DATA', photos: photos ? photos.reverse() : [] }));
         if (data.type === 'REMOTE_TORCH') toggleTorch(true);
+        // NEW: Handle Remote Motion Toggle
+        if (data.type === 'REMOTE_MOTION_TOGGLE') toggleMotion();
     }
     if (!isHost) {
         if (data.type === 'ACCESS_DENIED') {
